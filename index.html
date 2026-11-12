@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#111827">
+<title>Jungle Uyarıcı</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0b0f17;color:#e6e9ef;padding-bottom:40px}
+header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;background:#111827;position:sticky;top:0;z-index:5;border-bottom:1px solid #1f2937}
+h1{font-size:17px;margin:0}
+h2{font-size:14px;margin:0 0 6px;color:#9ca3af;font-weight:600}
+#state{font-size:13px;padding:4px 10px;border-radius:99px;background:#374151}
+#state.on{background:#065f46}
+#state.alert{background:#b91c1c}
+.card{margin:10px;padding:10px;background:#111827;border-radius:12px}
+#camWrap{position:relative;line-height:0;background:#000;border-radius:10px;overflow:hidden;min-height:60px}
+video{width:100%;height:auto;display:block}
+#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;touch-action:none}
+button{background:#1f2937;color:#e6e9ef;border:1px solid #374151;border-radius:9px;padding:9px 11px;font-size:14px;margin:6px 4px 0 0;cursor:pointer}
+button.primary{background:#2563eb;border-color:#2563eb}
+button.active{background:#ca8a04;border-color:#ca8a04;color:#000}
+#roiView{width:100%;max-width:420px;display:block;margin:0 auto;image-rendering:pixelated;background:#000;border-radius:8px}
+label.s{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:13px;margin:10px 0}
+label.s input[type=range]{grid-column:1/3;width:100%}
+.v{color:#fbbf24;font-family:monospace}
+.hint{font-size:12px;color:#9ca3af;line-height:1.45;margin:8px 0 0}
+#flash{position:fixed;inset:0;background:rgba(220,38,38,.6);pointer-events:none;opacity:0;transition:opacity .5s;z-index:50}
+#flash.show{opacity:1;transition:none}
+#samples{margin-top:8px;display:flex;flex-wrap:wrap;align-items:center}
+#samples img{width:40px;height:40px;border-radius:50%;margin:3px;border:2px solid #dc2626;background:#000}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;margin:8px 0}
+#info{font-size:12px;color:#9ca3af;margin-top:6px;font-family:monospace;white-space:pre-wrap}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1f2937;border:1px solid #374151;padding:8px 14px;border-radius:9px;font-size:14px;opacity:0;transition:opacity .3s;z-index:60;pointer-events:none}
+#toast.show{opacity:1}
+/* Şampiyon Seçici Stilleri */
+#champSearch{width:100%;padding:9px 12px;border-radius:8px;border:1px solid #374151;background:#0b0f17;color:#e6e9ef;font-size:14px;margin-bottom:8px;outline:none}
+#champSearch:focus{border-color:#ef4444}
+#champGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:8px;max-height:240px;overflow-y:auto;padding:8px;background:#0b0f17;border-radius:10px;border:1px solid #1f2937}
+.c-item{display:flex;flex-direction:column;align-items:center;cursor:pointer;padding:4px 2px;border-radius:8px;transition:transform .1s,background .15s;user-select:none}
+.c-item:hover{background:#1f2937}
+.c-item:active{transform:scale(0.93)}
+.c-item.sel{background:rgba(220,38,38,0.22);outline:2px solid #ef4444}
+.c-icon{width:44px;height:44px;border-radius:50%;border:3px solid #dc2626;box-shadow:0 0 6px rgba(220,38,38,.7),inset 0 0 4px #000;object-fit:cover;background:#111}
+.c-name{font-size:10px;color:#d1d5db;margin-top:4px;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="flash"></div>
+<div id="toast"></div>
+<header><h1>🗺️ Jungle Uyarıcı</h1><span id="state">Kapalı</span></header>
+
+<div class="card">
+  <h2>1 · Kamera</h2>
+  <div id="camWrap"><video id="video" playsinline muted autoplay></video><canvas id="overlay"></canvas></div>
+  <div>
+    <button id="btnStart" class="primary">📷 Kamerayı Başlat</button>
+    <button id="btnSelect">▭ Minimap Seç</button>
+    <button id="btnScreenSample">🎯 Ekrandan Jungler Örnekle</button>
+    <button id="btnTest">🔔 Test</button>
+  </div>
+  <label class="s" id="zoomRow" hidden>Kamera zoom <span class="v" id="zoomV"></span><input type="range" id="zoom"></label>
+  <p class="hint">Telefonu monitöre bakacak şekilde sabitle → kamerayı başlat → <b>Minimap Seç</b>'e bas ve görüntüde minimap'in etrafına parmağınla kutu çiz. Sesin çalışması için bir kez <b>Test</b>'e bas.</p>
+</div>
+
+<div class="card">
+  <h2>2 · Rakip Jungler Seç (Hazır Liste)</h2>
+  <input type="search" id="champSearch" placeholder="🔍 Şampiyon ara (ör: Lee Sin, Kayn, Viego, Shaco)...">
+  <div id="champGrid"><span class="hint" style="grid-column:1/-1;padding:8px">Şampiyon ikonları Riot sunucusundan yükleniyor...</span></div>
+  <p class="hint">Listeden rakip jungler'a <b>dokunman yeterli</b> — minimapteki kırmızı çerçeveli haliyle otomatik olarak hedefe eklenir! (Kamera ekran çekimi yaptığı için gerekirse aşağıdaki <b>Jungler benzerlik eşiği (%)</b> ayarını 65-75 civarına çekebilirsin.)</p>
+</div>
+
+<div class="card">
+  <h2>3 · Minimap analizi</h2>
+  <canvas id="roiView" width="400" height="400"></canvas>
+  <div>
+    <button data-tap="sample">👆 Jungler'a dokun</button>
+    <button data-tap="red">🎨 Kırmızı örnekle</button>
+  </div>
+  <div id="samples"></div>
+  <button id="btnClearSamples">Jungler örneklerini sil</button>
+  <div id="info"></div>
+  <p class="hint">
+    <b>Turkuaz</b> = kırmızı algılanan pikseller.<br>
+    <b>Kırmızı kutu</b> = jungler (uyarı veriyor) · <b>Gri kutu</b> = başka düşman şampiyon · <b>Kesikli gri</b> = yuvarlak değil (kule vb.), yok sayıldı.<br>
+    • Yukarıdaki listeden şampiyon seçebilir VEYA <b>Jungler'a dokun</b> ile minimapten/ekrandan canlı örnek alabilirsin. Örnek yoksa her düşman şampiyonda uyarır.<br>
+    • <b>Kırmızı örnekle</b>: algılama kötüyse bir düşman ikonunun kırmızı çerçevesine dokun.
+  </p>
+</div>
+
+<div class="card">
+  <h2>4 · Ayarlar</h2>
+  <label class="chk"><input type="checkbox" data-k="beep"> Bip sesi</label>
+  <label class="chk"><input type="checkbox" data-k="voice"> Sesli uyarı ("Jungler altta!")</label>
+  <label class="chk"><input type="checkbox" data-k="vib"> Titreşim</label>
+  <label class="chk"><input type="checkbox" data-k="showMask"> Algılama maskesini göster</label>
+  <label class="s">Görünür kaldıkça tekrar uyar (sn, 0 = kapalı) <span class="v"></span><input type="range" data-k="cooldown" min="0" max="30"></label>
+  <label class="s">Jungler benzerlik eşiği (%) <span class="v"></span><input type="range" data-k="sim" min="30" max="99"></label>
+  <label class="s">Yuvarlaklık eşiği (%) — kuleleri eler <span class="v"></span><input type="range" data-k="ring" min="30" max="100"></label>
+  <label class="s">Min ikon boyu (% minimap) — minyonları eler <span class="v"></span><input type="range" data-k="minSize" min="1" max="20" step="0.5"></label>
+  <label class="s">Max ikon boyu (% minimap) <span class="v"></span><input type="range" data-k="maxSize" min="3" max="40"></label>
+  <label class="s">Onay için gereken kare sayısı <span class="v"></span><input type="range" data-k="frames" min="1" max="10"></label>
+  <label class="s">Kırmızı ton (hue°) <span class="v"></span><input type="range" data-k="hue" min="0" max="359"></label>
+  <label class="s">Ton toleransı <span class="v"></span><input type="range" data-k="hueTol" min="3" max="60"></label>
+  <label class="s">Min doygunluk <span class="v"></span><input type="range" data-k="sat" min="0" max="100"></label>
+  <label class="s">Min parlaklık <span class="v"></span><input type="range" data-k="val" min="0" max="100"></label>
+  <button id="btnReset">Ayarları varsayılana döndür</button>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
+const roiView = $('roiView'), vctx = roiView.getContext('2d');
+const work = document.createElement('canvas');
+const wctx = work.getContext('2d', { willReadFrequently: true });
+
+const WW = 200, KEY = 'jungleWatch_v1', VER = 2;
+const DEF = { hue: 0, hueTol: 20, sat: 45, val: 35, minSize: 5, maxSize: 14, ring: 65, sim: 75, frames: 2, cooldown: 3,
+              beep: true, voice: true, vib: true, showMask: true };
+
+let S = load();
+function load() {
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  if (o.ver !== VER) {
+    o.minSize = DEF.minSize; o.maxSize = DEF.maxSize; o.cooldown = DEF.cooldown; o.frames = DEF.frames; o.ver = VER;
+  }
+  delete o.zones; delete o.ignore;
+  const s = Object.assign({}, DEF, { rect: null, samples: [] }, o);
+  if (!Array.isArray(s.samples)) s.samples = [];
+  return s;
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function setState(s) {
+  const el = $('state');
+  el.className = s === 'off' ? '' : s;
+  el.textContent = s === 'alert' ? '⚠️ JUNGLER!' : s === 'on' ? 'İzleniyor' : s === 'norect' ? 'Minimap seç' : 'Kapalı';
+}
+
+/* ---------- Renk yardımcıları ---------- */
+function rgb2hsv(r, g, b) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn;
+  let h = 0;
+  if (c) {
+    if (mx === r) h = ((g - b) / c) % 6;
+    else if (mx === g) h = (b - r) / c + 2;
+    else h = (r - g) / c + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return [h, mx ? c / mx * 100 : 0, mx / 2.55];
+}
+function isRed(r, g, b) {
+  const mx = Math.max(r, g, b);
+  if (mx / 2.55 < S.val) return false;
+  const mn = Math.min(r, g, b), c = mx - mn;
+  if (!c || c / mx * 100 < S.sat) return false;
+  let h;
+  if (mx === r) h = ((g - b) / c) % 6;
+  else if (mx === g) h = (b - r) / c + 2;
+  else h = (r - g) / c + 4;
+  h *= 60; if (h < 0) h += 360;
+  let dh = Math.abs(h - S.hue); if (dh > 180) dh = 360 - dh;
+  return dh <= S.hueTol;
+}
+// 40 kutulu ton/doygunluk histogramı (parlaklık değişimine dayanıklı)
+function bin(r, g, b) {
+  const [h, s, v] = rgb2hsv(r, g, b);
+  if (s < 25) return 36 + Math.min(3, Math.floor(v / 25));
+  return (Math.floor(h / 30) % 12) * 3 + Math.min(2, Math.floor((s - 25) / 25));
+}
+function histFrom(data, W, H, cx, cy, r) {
+  const h = new Array(40).fill(0); let n = 0; const r2 = r * r;
+  for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(H - 1, Math.ceil(cy + r)); y++)
+    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++) {
+      const dx = x - cx, dy = y - cy; if (dx * dx + dy * dy > r2) continue;
+      const i = (y * W + x) * 4; h[bin(data[i], data[i + 1], data[i + 2])]++; n++;
+    }
+  if (n) for (let k = 0; k < 40; k++) h[k] = +(h[k] / n).toFixed(4);
+  return h;
+}
+function bhat(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += Math.sqrt(a[i] * b[i]); return s; }
+
+/* ---------- Görüntü işleme ---------- */
+function dilate(m, W, H) {
+  const o = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!m[y * W + x]) continue;
+    for (let yy = Math.max(0, y - 1); yy <= Math.min(H - 1, y + 1); yy++)
+      for (let xx = Math.max(0, x - 1); xx <= Math.min(W - 1, x + 1); xx++) o[yy * W + xx] = 1;
+  }
+  return o;
+}
+function components(m, W, H) {
+  const lab = new Uint8Array(W * H), out = [], st = [];
+  for (let p = 0; p < W * H; p++) {
+    if (!m[p] || lab[p]) continue;
+    let x0 = W, y0 = H, x1 = 0, y1 = 0, n = 0;
+    st.push(p); lab[p] = 1;
+    while (st.length) {
+      const q = st.pop(), x = q % W, y = (q - x) / W; n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (let yy = Math.max(0, y - 1); yy <= Math.min(H - 1, y + 1); yy++)
+        for (let xx = Math.max(0, x - 1); xx <= Math.min(W - 1, x + 1); xx++) {
+          const k = yy * W + xx; if (m[k] && !lab[k]) { lab[k] = 1; st.push(k); }
+        }
+    }
+    out.push({ x0, y0, x1, y1, n });
+  }
+  return out;
+}
+// Şampiyon ikonu = kırmızı HALKA (ortası boş). Kule ve minyonlar halka değil.
+function ringScore(raw, W, H, cx, cy, R) {
+  const N = 24; let hit = 0;
+  for (let k = 0; k < N; k++) {
+    const a = k / N * 2 * Math.PI, ca = Math.cos(a), sa = Math.sin(a);
+    for (let rr = R * 0.5; rr <= R * 1.15; rr += 0.5) {
+      const x = Math.round(cx + ca * rr), y = Math.round(cy + sa * rr);
+      if (x >= 0 && y >= 0 && x < W && y < H && raw[y * W + x]) { hit++; break; }
+    }
+  }
+  let cin = 0, ctot = 0; const r0 = R * 0.4, r02 = r0 * r0;
+  for (let y = Math.floor(cy - r0); y <= Math.ceil(cy + r0); y++)
+    for (let x = Math.floor(cx - r0); x <= Math.ceil(cx + r0); x++) {
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const dx = x - cx, dy = y - cy; if (dx * dx + dy * dy > r02) continue;
+      ctot++; if (raw[y * W + x]) cin++;
+    }
+  return { ring: hit / N, fill: ctot ? cin / ctot : 1 };
+}
+
+let last = null, fpsT = 0, fpsN = 0, fps = 0;
+function processFrame() {
+  const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return;
+  const r = S.rect, sx = r.x * vw, sy = r.y * vh, sw = r.w * vw, sh = r.h * vh;
+  const W = WW, H = Math.max(40, Math.min(400, Math.round(WW * sh / sw)));
+  if (work.width !== W || work.height !== H) { work.width = W; work.height = H; }
+  wctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+  const data = wctx.getImageData(0, 0, W, H).data;
+  const raw = new Uint8Array(W * H);
+  for (let p = 0, i = 0; p < W * H; p++, i += 4) if (isRed(data[i], data[i + 1], data[i + 2])) raw[p] = 1;
+  const comps = components(dilate(raw, W, H), W, H);
+  const useSamples = S.samples.length > 0;
+  const blobs = [];
+  for (const c of comps) {
+    const bw = c.x1 - c.x0 + 1, bh = c.y1 - c.y0 + 1;
+    const size = Math.max(bw, bh) / W * 100;
+    if (size < S.minSize || size > S.maxSize) continue;             // minyonlar (küçük) ve büyük lekeler elenir
+    const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2;
+    const b = { x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, cx, cy, size };
+    const aspect = Math.min(bw, bh) / Math.max(bw, bh);
+    const R = (bw + bh) / 4 - 0.5;
+    const rs = ringScore(raw, W, H, cx, cy, R);
+    b.ringPct = rs.ring;
+    b.round = aspect >= 0.7 && rs.ring >= S.ring / 100 && rs.fill < 0.4; // kuleler elenir
+    if (b.round && useSamples) {
+      const hst = histFrom(data, W, H, cx, cy, Math.min(bw, bh) * 0.36);
+      b.sim = Math.max(...S.samples.map(s => bhat(hst, s.h)));
+      b.hit = b.sim >= S.sim / 100;
+    } else b.hit = b.round;
+    blobs.push(b);
+  }
+  last = { W, H, data, raw, comps, blobs };
+  decide(blobs.filter(b => b.hit));
+  render();
+  fpsN++; const now = performance.now();
+  if (now - fpsT > 1000) { fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
+}
+
+/* ---------- Uyarı mantığı ---------- */
+let present = false, hitRun = 0, missRun = 0, lastAlert = -1e9, lastPos = null, alertLog = [];
+function decide(hits) {
+  if (hits.length) { hitRun++; missRun = 0; } else { missRun++; hitRun = 0; }
+  const now = performance.now();
+  if (hits.length && (present || hitRun >= S.frames)) {
+    const b = hits.reduce((a, c) => ((c.sim || 0) > (a.sim || 0) ? c : a));
+    const pos = where(b);
+    const since = now - lastAlert;
+    let fire = false;
+    if (!present) fire = since >= 1500;
+    else if (S.cooldown > 0 && since >= S.cooldown * 1000) fire = true;
+    else if (pos !== lastPos && since >= 1500) fire = true;
+    present = true;
+    if (fire) { lastAlert = now; lastPos = pos; fireAlert(pos); }
+  }
+  if (present && missRun >= 6) present = false;
+  setState(present ? 'alert' : 'on');
+}
+function where(b) {
+  const s = b.cx / last.W + b.cy / last.H;
+  return s < 0.8 ? 'üstte' : s > 1.2 ? 'altta' : 'ortada';
+}
+function fireAlert(pos) {
+  const cname = S.samples.find(s => s.name);
+  const label = cname ? cname.name + ' ' : (S.samples.length ? 'Jungler ' : 'Düşman ');
+  const txt = label + pos + '!';
+  const f = $('flash'); f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 120);
+  if (S.beep) beep();
+  if (S.vib && navigator.vibrate) navigator.vibrate([250, 100, 250]);
+  if (S.voice) setTimeout(() => speak(txt), S.beep ? 550 : 0);
+  alertLog.unshift(new Date().toLocaleTimeString('tr-TR') + '  ' + txt);
+  alertLog = alertLog.slice(0, 4);
+}
+
+let actx = null;
+function unlockAudio() {
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+  if ('speechSynthesis' in window && !unlockAudio._s) { unlockAudio._s = 1; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
+}
+function beep() {
+  if (!actx) return;
+  if (actx.state !== 'running') actx.resume();
+  const t = actx.currentTime + 0.02;
+  [0, 0.17, 0.34].forEach((d, i) => {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'square'; o.frequency.value = i % 2 ? 660 : 990;
+    g.gain.setValueAtTime(0.0001, t + d);
+    g.gain.exponentialRampToValueAtTime(0.35, t + d + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.14);
+    o.connect(g).connect(actx.destination); o.start(t + d); o.stop(t + d + 0.15);
+  });
+}
+function speak(txt) {
+  if (!('speechSynthesis' in window)) return;
+  const ss = window.speechSynthesis;
+  ss.cancel(); ss.resume();
+  const u = new SpeechSynthesisUtterance(txt); u.lang = 'tr-TR'; u.rate = 1.25;
+  setTimeout(() => ss.speak(u), 60);
+}
+
+/* ---------- Çizim ---------- */
+function render() {
+  if (!last) return;
+  const { W, H, raw, blobs } = last, sc = 2;
+  if (roiView.width !== W * sc || roiView.height !== H * sc) { roiView.width = W * sc; roiView.height = H * sc; }
+  vctx.imageSmoothingEnabled = false;
+  vctx.drawImage(work, 0, 0, W * sc, H * sc);
+  if (S.showMask) {
+    vctx.fillStyle = 'rgba(0,255,255,.6)';
+    for (let p = 0; p < W * H; p++) if (raw[p]) { const x = p % W; vctx.fillRect(x * sc, (p - x) / W * sc, sc, sc); }
+  }
+  vctx.font = 'bold 13px sans-serif';
+  for (const b of blobs) {
+    vctx.lineWidth = b.round ? 2 : 1;
+    vctx.setLineDash(b.round ? [] : [3, 3]);
+    vctx.strokeStyle = b.hit ? '#ff2d2d' : '#9ca3af';
+    vctx.strokeRect(b.x0 * sc - 2, b.y0 * sc - 2, (b.x1 - b.x0 + 1) * sc + 4, (b.y1 - b.y0 + 1) * sc + 4);
+    if (b.sim !== undefined) {
+      vctx.fillStyle = b.hit ? '#ff2d2d' : '#e5e7eb';
+      vctx.fillText(Math.round(b.sim * 100) + '%', b.x1 * sc + 4, b.y0 * sc + 10);
+    }
+  }
+  vctx.setLineDash([]);
+  const champs = blobs.filter(b => b.round).length;
+  $('info').textContent = `${fps.toFixed(1)} fps · ${champs} düşman şampiyon · ${blobs.length - champs} yuvarlak olmayan (yok sayıldı)` +
+    (alertLog.length ? '\nSon uyarılar:\n' + alertLog.join('\n') : '');
+}
+function drawOverlay() {
+  const w = video.clientWidth, h = video.clientHeight, dpr = devicePixelRatio || 1;
+  if (!w || !h) return;
+  if (overlay.width !== Math.round(w * dpr) || overlay.height !== Math.round(h * dpr)) { overlay.width = Math.round(w * dpr); overlay.height = Math.round(h * dpr); }
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, w, h);
+  octx.lineWidth = 2;
+  if (S.rect) { octx.strokeStyle = present ? '#ef4444' : '#22c55e'; octx.strokeRect(S.rect.x * w, S.rect.y * h, S.rect.w * w, S.rect.h * h); }
+  if (dragStart && dragCur) {
+    const r = normRect(dragStart, dragCur);
+    octx.setLineDash([6, 4]); octx.strokeStyle = dragMode === 'sample' ? '#eab308' : '#fff';
+    octx.strokeRect(r.x * w, r.y * h, r.w * w, r.h * h); octx.setLineDash([]);
+  }
+  if (dragMode) {
+    octx.fillStyle = 'rgba(0,0,0,.55)'; octx.fillRect(0, 0, w, 28);
+    octx.fillStyle = '#fff'; octx.font = '14px sans-serif';
+    octx.fillText(dragMode === 'sample' ? "Jungler ikonunun/portresinin etrafına kutu çiz" : "Minimap'in etrafına kutu çiz", 8, 19);
+  }
+}
+function normRect(a, b) {
+  const x = Math.max(0, Math.min(a.x, b.x)), y = Math.max(0, Math.min(a.y, b.y));
+  return { x, y, w: Math.min(1, Math.max(a.x, b.x)) - x, h: Math.min(1, Math.max(a.y, b.y)) - y };
+}
+
+/* ---------- Ana döngü ---------- */
+let running = false, lastProc = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  drawOverlay();
+  if (!S.rect) { setState('norect'); return; }
+  if (video.readyState < 2) return;
+  if (ts - lastProc < 80) return; // ~12 fps analiz
+  lastProc = ts;
+  processFrame();
+}
+
+/* ---------- Kamera ---------- */
+let stream = null, track = null, wake = null;
+async function startCam() {
+  unlockAudio();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Kamera API yok. Sayfayı HTTPS üzerinden aç.'); return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      audio: false
+    });
+  } catch (e) { toast('Kamera açılamadı: ' + e.message); return; }
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) {}
+  track = stream.getVideoTracks()[0];
+  setupZoom();
+  requestWake();
+  $('btnStart').textContent = '🔄 Kamerayı Yeniden Başlat';
+  if (!running) { running = true; requestAnimationFrame(loop); }
+  if (!S.rect) setTimeout(() => setDragMode('minimap'), 400);
+}
+function setupZoom() {
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  if (!caps.zoom) return;
+  const z = $('zoom');
+  z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1;
+  z.value = (track.getSettings().zoom) || caps.zoom.min;
+  $('zoomV').textContent = (+z.value).toFixed(1) + 'x';
+  $('zoomRow').hidden = false;
+  z.oninput = () => { $('zoomV').textContent = (+z.value).toFixed(1) + 'x'; track.applyConstraints({ advanced: [{ zoom: +z.value }] }).catch(() => {}); };
+}
+async function requestWake() { try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {} }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stream) requestWake(); });
+
+/* ---------- Kamera üstü sürükleme (minimap / ekran örneği) ---------- */
+let dragMode = null, dragStart = null, dragCur = null;
+function setDragMode(m) {
+  dragMode = dragMode === m ? null : m;
+  overlay.style.pointerEvents = dragMode ? 'auto' : 'none';
+  $('btnSelect').classList.toggle('active', dragMode === 'minimap');
+  $('btnScreenSample').classList.toggle('active', dragMode === 'sample');
+}
+function evPos(e) { const r = overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; }
+overlay.addEventListener('pointerdown', e => { if (!dragMode) return; e.preventDefault(); overlay.setPointerCapture(e.pointerId); dragStart = dragCur = evPos(e); });
+overlay.addEventListener('pointermove', e => { if (dragStart) dragCur = evPos(e); });
+overlay.addEventListener('pointerup', () => {
+  if (!dragStart) return;
+  const r = normRect(dragStart, dragCur); dragStart = dragCur = null;
+  if (r.w < 0.01 || r.h < 0.01) return;
+  if (dragMode === 'minimap') { S.rect = r; save(); toast('Minimap ayarlandı ✔'); }
+  else if (dragMode === 'sample') sampleFromScreen(r);
+  setDragMode(null);
+});
+function sampleFromScreen(r) {
+  const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return;
+  const t = document.createElement('canvas'); t.width = t.height = 48;
+  const tc = t.getContext('2d', { willReadFrequently: true });
+  tc.drawImage(video, r.x * vw, r.y * vh, r.w * vw, r.h * vh, 0, 0, 48, 48);
+  const d = tc.getImageData(0, 0, 48, 48).data;
+  addSample(histFrom(d, 48, 48, 24, 24, 20), t.toDataURL('image/jpeg', 0.7));
+}
+
+/* ---------- Analiz görüntüsüne dokunma ---------- */
+let tapMode = null;
+function setTapMode(m) {
+  tapMode = m;
+  document.querySelectorAll('[data-tap]').forEach(x => x.classList.toggle('active', x.dataset.tap === tapMode));
+  roiView.style.touchAction = tapMode ? 'none' : 'auto';
+}
+document.querySelectorAll('[data-tap]').forEach(b => b.onclick = () => {
+  setTapMode(tapMode === b.dataset.tap ? null : b.dataset.tap);
+  if (tapMode === 'sample') toast('Minimapteki düşman jungler ikonuna dokun');
+  if (tapMode === 'red') toast('Bir düşman ikonunun kırmızı çerçevesine dokun');
+});
+function roiPos(e) { const r = roiView.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * last.W, y: (e.clientY - r.top) / r.height * last.H }; }
+roiView.addEventListener('pointerdown', e => {
+  if (!last || !tapMode) return;
+  e.preventDefault();
+  const p = roiPos(e);
+  if (tapMode === 'sample') sampleAt(p);
+  else if (tapMode === 'red') redAt(p);
+  setTapMode(null);
+});
+
+function sampleAt(p) {
+  const { W, H, data, comps } = last;
+  let best = null, bd = 1e9;
+  for (const c of comps) {
+    const bw = c.x1 - c.x0 + 1, bh = c.y1 - c.y0 + 1, sz = Math.max(bw, bh);
+    if (sz / W * 100 > S.maxSize * 1.5) continue;
+    const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2, d = Math.hypot(cx - p.x, cy - p.y);
+    if (d < Math.max(6, sz) && d < bd) { bd = d; best = { cx, cy, half: Math.min(bw, bh) / 2 }; }
+  }
+  if (!best) best = { cx: p.x, cy: p.y, half: (S.minSize + S.maxSize) / 4 / 100 * W };
+  const t = document.createElement('canvas'); t.width = t.height = 40;
+  const R = best.half + 1;
+  t.getContext('2d').drawImage(work, best.cx - R, best.cy - R, 2 * R, 2 * R, 0, 0, 40, 40);
+  addSample(histFrom(data, W, H, best.cx, best.cy, best.half * 0.72), t.toDataURL('image/jpeg', 0.7));
+}
+function addSample(h, thumb, cid, name) {
+  S.samples.push({ h, t: thumb, cid, name });
+  if (S.samples.length > 6) S.samples.shift();
+  save(); renderSamples(); updateChampHighlight();
+  toast((name ? name + ' eklendi ✔' : 'Jungler örneği eklendi ✔') + ' (' + S.samples.length + ')');
+}
+function redAt(p) {
+  const { W, H, data } = last; let best = null;
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+    const x = Math.round(p.x) + dx, y = Math.round(p.y) + dy;
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    const i = (y * W + x) * 4, hsv = rgb2hsv(data[i], data[i + 1], data[i + 2]);
+    if (!best || hsv[1] * hsv[2] > best[1] * best[2]) best = hsv;
+  }
+  if (!best) return;
+  S.hue = Math.round(best[0]) % 360;
+  S.sat = Math.max(15, Math.round(best[1] * 0.6));
+  S.val = Math.max(15, Math.round(best[2] * 0.6));
+  syncInputs(); save(); toast(`Renk ayarlandı: ton ${S.hue}°`);
+}
+function renderSamples() {
+  $('samples').innerHTML = S.samples.length
+    ? S.samples.map(s => `<img src="${s.t}" title="${s.name || ''}" alt="">`).join('') + `<span class="hint" style="margin:0 6px">${S.samples.map(s => s.name || 'Örnek').join(', ')}</span>`
+    : '<span class="hint" style="margin:0">Jungler örneği yok → <b>tüm</b> düşman şampiyonlarda uyarır.</span>';
+}
+
+/* ---------- Hazır Şampiyon İkonları (Riot Data Dragon) ---------- */
+let CHAMPS = [], DD_VER = '14.22.1';
+async function loadChampions() {
+  try {
+    const vr = await fetch('https://ddragon.leagueoflegends.com/api/versions.json');
+    const vs = await vr.json();
+    if (vs && vs[0]) DD_VER = vs[0];
+    let cr = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VER}/data/tr_TR/champion.json`);
+    if (!cr.ok) cr = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DD_VER}/data/en_US/champion.json`);
+    const cd = await cr.json();
+    CHAMPS = Object.values(cd.data).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+    renderChampGrid();
+  } catch (e) {
+    $('champGrid').innerHTML = '<span class="hint" style="grid-column:1/-1">Şampiyon listesi yüklenemedi. İnternet bağlantısını kontrol et.</span>';
+  }
+}
+function renderChampGrid(q = '') {
+  const g = $('champGrid');
+  if (!CHAMPS.length) return;
+  const f = q.trim().toLocaleLowerCase('tr');
+  const list = f ? CHAMPS.filter(c => c.name.toLocaleLowerCase('tr').includes(f) || c.id.toLowerCase().includes(f)) : CHAMPS;
+  g.innerHTML = list.map(c => {
+    const sel = S.samples.some(s => s.cid === c.id) ? ' sel' : '';
+    const url = `https://ddragon.leagueoflegends.com/cdn/${DD_VER}/img/champion/${c.image.full}`;
+    return `<div class="c-item${sel}" data-cid="${c.id}" data-name="${c.name}" data-img="${url}">
+      <img class="c-icon" loading="lazy" crossorigin="anonymous" src="${url}" alt="${c.name}">
+      <span class="c-name">${c.name}</span>
+    </div>`;
+  }).join('');
+  g.querySelectorAll('.c-item').forEach(el => {
+    el.onclick = () => selectChampion(el.dataset.cid, el.dataset.name, el.dataset.img);
+  });
+}
+function updateChampHighlight() {
+  document.querySelectorAll('#champGrid .c-item').forEach(el => {
+    el.classList.toggle('sel', S.samples.some(s => s.cid === el.dataset.cid));
+  });
+}
+function selectChampion(cid, name, url) {
+  unlockAudio();
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    // Minimapteki düşman ikonu simülasyonu: yuvarlak kırpılmış portre + kırmızı rakip çerçevesi
+    const sz = 48, cx = 24, cy = 24, R = 21;
+    const c = document.createElement('canvas'); c.width = c.height = sz;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+    // DDragon kare ikonunun kenar boşluklarını kırparak minimap portresi gibi merkeze odakla
+    const pad = img.width * 0.08;
+    ctx.drawImage(img, pad, pad, img.width - pad * 2, img.height - pad * 2, 2, 2, sz - 4, sz - 4);
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.lineWidth = 3.5; ctx.strokeStyle = '#dc2626'; ctx.stroke();
+
+    const d = ctx.getImageData(0, 0, sz, sz).data;
+    // Tek tıkla seçilen jungler aktif hedef olur (önceki hazır seçimi değiştirir)
+    S.samples = [];
+    // Hem saf renk histogramını hem de ekran/kamera parlama toleranslı versiyonunu ekle
+    const h1 = histFrom(d, sz, sz, cx, cy, 17);
+    addSample(h1, c.toDataURL('image/jpeg', 0.8), cid, name);
+
+    // Kamera çekiminde ekran biraz daha soluk/parlak çıkabileceği için hafif açılmış 2. profili de aynı şampiyona ekle
+    const c2 = document.createElement('canvas'); c2.width = c2.height = sz;
+    const ctx2 = c2.getContext('2d', { willReadFrequently: true });
+    ctx2.filter = 'contrast(0.85) brightness(1.12) saturate(0.85)';
+    ctx2.drawImage(c, 0, 0);
+    const d2 = ctx2.getImageData(0, 0, sz, sz).data;
+    S.samples.push({ h: histFrom(d2, sz, sz, cx, cy, 17), t: c.toDataURL('image/jpeg', 0.8), cid, name });
+    save(); renderSamples(); updateChampHighlight();
+  };
+  img.onerror = () => toast('İkon yüklenemedi, tekrar dene');
+  img.src = url;
+}
+$('champSearch').addEventListener('input', e => renderChampGrid(e.target.value));
+
+/* ---------- Butonlar & ayarlar ---------- */
+$('btnStart').onclick = startCam;
+$('btnSelect').onclick = () => { if (!stream) return toast('Önce kamerayı başlat'); setDragMode('minimap'); };
+$('btnScreenSample').onclick = () => { if (!stream) return toast('Önce kamerayı başlat'); setDragMode('sample'); };
+$('btnTest').onclick = () => { unlockAudio(); fireAlert('altta'); };
+$('btnClearSamples').onclick = () => { S.samples = []; save(); renderSamples(); updateChampHighlight(); };
+$('btnReset').onclick = () => { Object.assign(S, DEF); syncInputs(); save(); toast('Varsayılanlar yüklendi'); };
+
+function syncInputs() {
+  document.querySelectorAll('[data-k]').forEach(el => {
+    const k = el.dataset.k;
+    if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k];
+    const sp = el.previousElementSibling;
+    if (sp && sp.classList.contains('v')) sp.textContent = S[k];
+  });
+}
+document.querySelectorAll('[data-k]').forEach(el => el.addEventListener('input', () => {
+  S[el.dataset.k] = el.type === 'checkbox' ? el.checked : +el.value;
+  syncInputs(); save();
+}));
+syncInputs(); renderSamples(); setState('off'); loadChampions();
+</script>
+</body>
+</html>
